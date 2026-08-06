@@ -345,6 +345,51 @@ export type Database = {
         }
         Relationships: []
       }
+      git_connections: {
+        Row: {
+          access_token: string
+          account_id: string
+          account_login: string
+          avatar_url: string | null
+          created_at: string
+          id: string
+          provider: Database["public"]["Enums"]["git_provider"]
+          refresh_token: string | null
+          scopes: string
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          account_id?: string
+          account_login?: string
+          avatar_url?: string | null
+          created_at?: string
+          id?: string
+          provider?: Database["public"]["Enums"]["git_provider"]
+          refresh_token?: string | null
+          scopes?: string
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          account_id?: string
+          account_login?: string
+          avatar_url?: string | null
+          created_at?: string
+          id?: string
+          provider?: Database["public"]["Enums"]["git_provider"]
+          refresh_token?: string | null
+          scopes?: string
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       git_events: {
         Row: {
           actor: string
@@ -399,10 +444,36 @@ export type Database = {
           },
         ]
       }
-      git_repos: {
+      git_oauth_states: {
         Row: {
           created_at: string
+          provider: Database["public"]["Enums"]["git_provider"]
+          redirect_to: string
+          state: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          provider?: Database["public"]["Enums"]["git_provider"]
+          redirect_to?: string
+          state: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          provider?: Database["public"]["Enums"]["git_provider"]
+          redirect_to?: string
+          state?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      git_repos: {
+        Row: {
+          connection_id: string | null
+          created_at: string
           default_branch: string
+          external_id: string
           full_name: string
           html_url: string
           id: string
@@ -411,10 +482,15 @@ export type Database = {
           provider: Database["public"]["Enums"]["git_provider"]
           updated_at: string
           user_id: string
+          webhook_id: string
+          webhook_secret: string | null
+          webhook_status: string
         }
         Insert: {
+          connection_id?: string | null
           created_at?: string
           default_branch?: string
+          external_id?: string
           full_name: string
           html_url?: string
           id?: string
@@ -423,10 +499,15 @@ export type Database = {
           provider?: Database["public"]["Enums"]["git_provider"]
           updated_at?: string
           user_id: string
+          webhook_id?: string
+          webhook_secret?: string | null
+          webhook_status?: string
         }
         Update: {
+          connection_id?: string | null
           created_at?: string
           default_branch?: string
+          external_id?: string
           full_name?: string
           html_url?: string
           id?: string
@@ -435,8 +516,19 @@ export type Database = {
           provider?: Database["public"]["Enums"]["git_provider"]
           updated_at?: string
           user_id?: string
+          webhook_id?: string
+          webhook_secret?: string | null
+          webhook_status?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "git_repos_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "git_connections"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       invitations: {
         Row: {
