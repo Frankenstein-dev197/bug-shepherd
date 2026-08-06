@@ -52,6 +52,86 @@ export type Database = {
           },
         ]
       }
+      api_key_usage: {
+        Row: {
+          api_key_id: string
+          created_at: string
+          endpoint: string
+          id: string
+          method: string
+          status_code: number
+        }
+        Insert: {
+          api_key_id: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          method?: string
+          status_code?: number
+        }
+        Update: {
+          api_key_id?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          method?: string
+          status_code?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_key_usage_api_key_id_fkey"
+            columns: ["api_key_id"]
+            isOneToOne: false
+            referencedRelation: "api_keys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      api_keys: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          id: string
+          key_hash: string
+          key_last4: string
+          key_prefix: string
+          last_used_at: string | null
+          name: string
+          revoked_at: string | null
+          scopes: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          key_hash: string
+          key_last4?: string
+          key_prefix: string
+          last_used_at?: string | null
+          name?: string
+          revoked_at?: string | null
+          scopes?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          key_hash?: string
+          key_last4?: string
+          key_prefix?: string
+          last_used_at?: string | null
+          name?: string
+          revoked_at?: string | null
+          scopes?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       attachments: {
         Row: {
           bug_id: string
@@ -235,6 +315,129 @@ export type Database = {
         }
         Relationships: []
       }
+      console_history: {
+        Row: {
+          command: string
+          created_at: string
+          duration_ms: number
+          id: string
+          output: string
+          success: boolean
+          user_id: string
+        }
+        Insert: {
+          command: string
+          created_at?: string
+          duration_ms?: number
+          id?: string
+          output?: string
+          success?: boolean
+          user_id: string
+        }
+        Update: {
+          command?: string
+          created_at?: string
+          duration_ms?: number
+          id?: string
+          output?: string
+          success?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
+      git_events: {
+        Row: {
+          actor: string
+          branch: string | null
+          bug_id: string | null
+          commit_sha: string | null
+          created_at: string
+          event_type: string
+          html_url: string | null
+          id: string
+          message: string
+          repo_id: string | null
+        }
+        Insert: {
+          actor?: string
+          branch?: string | null
+          bug_id?: string | null
+          commit_sha?: string | null
+          created_at?: string
+          event_type?: string
+          html_url?: string | null
+          id?: string
+          message?: string
+          repo_id?: string | null
+        }
+        Update: {
+          actor?: string
+          branch?: string | null
+          bug_id?: string | null
+          commit_sha?: string | null
+          created_at?: string
+          event_type?: string
+          html_url?: string | null
+          id?: string
+          message?: string
+          repo_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "git_events_bug_id_fkey"
+            columns: ["bug_id"]
+            isOneToOne: false
+            referencedRelation: "bugs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "git_events_repo_id_fkey"
+            columns: ["repo_id"]
+            isOneToOne: false
+            referencedRelation: "git_repos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      git_repos: {
+        Row: {
+          created_at: string
+          default_branch: string
+          full_name: string
+          html_url: string
+          id: string
+          is_active: boolean
+          last_event_at: string | null
+          provider: Database["public"]["Enums"]["git_provider"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          default_branch?: string
+          full_name: string
+          html_url?: string
+          id?: string
+          is_active?: boolean
+          last_event_at?: string | null
+          provider?: Database["public"]["Enums"]["git_provider"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          default_branch?: string
+          full_name?: string
+          html_url?: string
+          id?: string
+          is_active?: boolean
+          last_event_at?: string | null
+          provider?: Database["public"]["Enums"]["git_provider"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       invitations: {
         Row: {
           created_at: string
@@ -412,6 +615,7 @@ export type Database = {
         | "testing"
         | "resolved"
         | "closed"
+      git_provider: "github" | "gitlab" | "bitbucket" | "other"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -549,6 +753,7 @@ export const Constants = {
         "resolved",
         "closed",
       ],
+      git_provider: ["github", "gitlab", "bitbucket", "other"],
     },
   },
 } as const
