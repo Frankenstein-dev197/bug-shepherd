@@ -6,6 +6,8 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Plus, Trash2, Search, Copy, ChevronUp, ChevronDown } from 'lucide-react';
 import { useIDEStore } from '../stores/ideStore';
 import { useEffectOnce } from '../hooks/useEffectOnce';
+import { supabase } from '@/integrations/supabase/client';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalComponentProps {
@@ -94,35 +96,8 @@ function TerminalComponent({ sessionId }: TerminalComponentProps) {
       const [command, ...args] = trimmedCmd.split(' ');
 
       switch (command.toLowerCase()) {
-        case 'help':
-          terminal.writeln('\x1b[36mAvailable commands:\x1b[0m');
-          terminal.writeln('  \x1b[33mhelp\x1b[0m     - Show this help');
-          terminal.writeln('  \x1b[33mclear\x1b[0m   - Clear terminal');
-          terminal.writeln('  \x1b[33mls\x1b[0m       - List files');
-          terminal.writeln('  \x1b[33mpwd\x1b[0m      - Print working directory');
-          terminal.writeln('  \x1b[33mdate\x1b[0m     - Show current date');
-          terminal.writeln('  \x1b[33mecho\x1b[0m     - Print text');
-          terminal.writeln('  \x1b[33mwhoami\x1b[0m   - Show current user');
-          terminal.writeln('  \x1b[33mgit status\x1b[0m - Show git status');
-          terminal.writeln('');
-          terminal.writeln('\x1b[36mGit Commands:\x1b[0m');
-          terminal.writeln('  \x1b[33mgit status\x1b[0m  - Show working tree status');
-          terminal.writeln('  \x1b[33mgit log\x1b[0m     - Show commit logs');
-          terminal.writeln('  \x1b[33mgit branch\x1b[0m - List branches');
-          terminal.writeln('  \x1b[33mgit diff\x1b[0m   - Show changes');
-          break;
-
         case 'clear':
           terminal.clear();
-          break;
-
-        case 'ls':
-          terminal.writeln('\x1b[34msrc/\x1b[0m        \x1b[32mcomponents/\x1b[0m       \x1b[33mpackage.json\x1b[0m');
-          terminal.writeln('\x1b[36mREADME.md\x1b[0m    \x1b[35mnode_modules/\x1b[0m');
-          break;
-
-        case 'pwd':
-          terminal.writeln('/workspace/project');
           break;
 
         case 'date':
@@ -134,48 +109,33 @@ function TerminalComponent({ sessionId }: TerminalComponentProps) {
           addTerminalLine(sessionId, { type: 'output', content: args.join(' ') });
           break;
 
-        case 'whoami':
-          terminal.writeln('developer');
-          break;
+        default: {
+          // Real server-side execution (dev-console edge function)
+          const { data, error } = await supabase.functions.invoke('dev-console', {
+            body: { command: trimmedCmd },
+          });
 
-        case 'git':
-          if (args[0] === 'status') {
-            terminal.writeln('On branch \x1b[32mmain\x1b[0m');
-            terminal.writeln('Changes not staged for commit:');
-            terminal.writeln('  \x1b[31mmodified:   src/App.tsx\x1b[0m');
-            terminal.writeln('  \x1b[32mnew file:   src/ide/\x1b[0m');
-            terminal.writeln('');
-            terminal.writeln('no changes added to commit');
-          } else if (args[0] === 'log') {
-            terminal.writeln('\x1b[33mcommit a1b2c3d\x1b[0m (HEAD -> main)');
-            terminal.writeln('Author: Developer <dev@example.com>');
-            terminal.writeln('Date:   ' + new Date().toDateString());
-            terminal.writeln('');
-            terminal.writeln('    Initial commit');
-          } else if (args[0] === 'branch') {
-            terminal.writeln('  \x1b[32m*\x1b[0m main');
-            terminal.writeln('    feature/ide');
-            terminal.writeln('    bugfix/terminal');
-          } else if (args[0] === 'diff') {
-            terminal.writeln('\x1b[31m-diff --git a/src/App.tsx b/src/App.tsx\x1b[0m');
-            terminal.writeln('\x1b[31m--- a/src/App.tsx\x1b[0m');
-            terminal.writeln('\x1b[32m+++ b/src/App.tsx\x1b[0m');
-            terminal.writeln('\x1b[36m@@ -1,5 +1,6 @@\x1b[0m');
-            terminal.writeln(' import { useState } from \'react\';');
-            terminal.writeln('+import { IDE } from \'./ide\';');
-            terminal.writeln(' ');
-            terminal.writeln(' function App() {');
-          } else {
-            terminal.writeln(`\x1b[31mgit: '${args[0]}' is not a git command\x1b[0m`);
+          if (error) {
+            const detail =
+              error instanceof FunctionsHttpError
+                ? await error.context.text()
+                : error.message;
+            terminal.writeln(`\x1b[31m${detail}\x1b[0m`);
+            addTerminalLine(sessionId, { type: 'error', content: detail });
+            break;
           }
-          break;
 
-        default:
-          terminal.writeln(`\x1b[31mCommand not found: ${command}\x1b[0m`);
-          terminal.writeln(`\x1b[90mType "help" for available commands\x1b[0m`);
-          addTerminalLine(sessionId, { type: 'error', content: `Command not found: ${command}` });
+          const output = String(data?.output ?? '');
+          const success = data?.success !== false;
+          output.split('\n').forEach((line: string) => {
+            terminal.writeln(success ? line : `\x1b[31m${line}\x1b[0m`);
+          });
+          addTerminalLine(sessionId, {
+            type: success ? 'output' : 'error',
+            content: output,
+          });
+        }
       }
-
       addTerminalLine(sessionId, { type: 'output', content: '' });
     };
 
