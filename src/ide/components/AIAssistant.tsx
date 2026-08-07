@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { useIDEStore } from '../stores/ideStore';
 import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 
 interface AIProviderConfig {
   openai: {
@@ -139,13 +141,12 @@ export function AIAssistant() {
   }, [input]);
 
   const handleSend = useCallback(async () => {
-    if (!input.trim() || !activeConversationId || !activeAIProviderId) return;
+    if (!input.trim() || !activeConversationId) return;
 
     const userMessage = input;
     setInput('');
     setIsLoading(true);
 
-    // Add user message
     addMessage(activeConversationId, {
       role: 'user',
       content: userMessage,
@@ -153,83 +154,31 @@ export function AIAssistant() {
     });
 
     try {
-      const provider = aiProviders.find((p) => p.id === activeAIProviderId);
-      if (!provider) {
-        throw new Error('No AI provider configured');
+      const history = (activeConversation?.messages ?? []).map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+
+      const { data, error } = await supabase.functions.invoke('ide-ai', {
+        body: {
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            ...history,
+            { role: 'user', content: userMessage },
+          ],
+        },
+      });
+
+      if (error) {
+        const detail =
+          error instanceof FunctionsHttpError ? await error.context.text() : error.message;
+        throw new Error(detail);
       }
 
-      // Build messages for API
-      const messages = [
-        { role: 'system', content: SYSTEM_PROMPT },
-        ...activeConversation!.messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
-      ];
-
-      let response: string;
-
-      if (provider.name === 'openai' || provider.name === 'Google') {
-        // OpenAI/Gemini compatible API
-        const response = await fetch(`${provider.baseUrl}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${provider.apiKey}`,
-          },
-          body: JSON.stringify({
-            model: provider.model || 'gpt-4o',
-            messages,
-            max_tokens: 4000,
-            temperature: 0.7,
-          }),
-        });
-
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
-          throw new Error(error.error?.message || `API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const assistantMessage = data.choices[0]?.message?.content || 'No response received.';
-
-        addMessage(activeConversationId, {
-          role: 'assistant',
-          content: assistantMessage,
-        });
-      } else if (provider.name === 'Anthropic') {
-        // Anthropic API
-        const anthropicMessages = messages.filter((m) => m.role !== 'system');
-        const systemPrompt = messages.find((m) => m.role === 'system')?.content || '';
-
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': provider.apiKey,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify({
-            model: provider.model || 'claude-sonnet-4-20250514',
-            max_tokens: 4000,
-            system: systemPrompt,
-            messages: anthropicMessages,
-          }),
-        });
-
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
-          throw new Error(error.error?.message || `API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const assistantMessage = data.content[0]?.text || 'No response received.';
-
-        addMessage(activeConversationId, {
-          role: 'assistant',
-          content: assistantMessage,
-        });
-      }
+      addMessage(activeConversationId, {
+        role: 'assistant',
+        content: String(data?.content || 'No response received.'),
+      });
     } catch (error) {
       console.error('AI Error:', error);
       toast({
@@ -240,7 +189,7 @@ export function AIAssistant() {
     } finally {
       setIsLoading(false);
     }
-  }, [input, activeConversationId, activeAIProviderId, aiProviders, addMessage, tabs]);
+  }, [input, activeConversationId, activeConversation, addMessage, tabs]);
 
   const handleAddProvider = useCallback(() => {
     if (!apiKey.trim()) {
@@ -277,7 +226,7 @@ export function AIAssistant() {
     setInput((prev) => `${prev}\n\n\`\`\`${filePath}\n${content}\n\`\`\``);
   }, []);
 
-  if (!activeAIProviderId) {
+  if (false) {
     return (
       <div className="flex flex-col h-full bg-[#1e1e1e]">
         <div className="flex items-center justify-center h-full">
