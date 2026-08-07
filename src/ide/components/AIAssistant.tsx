@@ -226,7 +226,7 @@ export function AIAssistant() {
     setInput((prev) => `${prev}\n\n\`\`\`${filePath}\n${content}\n\`\`\``);
   }, []);
 
-  if (false) {
+  if (!activeConversationId) {
     return (
       <div className="flex flex-col h-full bg-[#1e1e1e]">
         <div className="flex items-center justify-center h-full">
@@ -234,13 +234,13 @@ export function AIAssistant() {
             <Sparkles className="w-16 h-16 mx-auto mb-4 text-[#dcb67a]" />
             <h2 className="text-xl font-semibold text-[#cccccc] mb-2">AI Assistant</h2>
             <p className="text-[#858585] mb-6">
-              Configure an AI provider to get started. Your API key is stored locally and never sent to our servers.
+              Powered by Lovable AI — no API key needed. Start a conversation to get help with your code.
             </p>
             <button
-              onClick={() => setShowSettings(true)}
+              onClick={handleNewConversation}
               className="px-4 py-2 bg-[#0e639c] text-white rounded hover:bg-[#1177bb]"
             >
-              Configure AI Provider
+              New conversation
             </button>
           </div>
         </div>
