@@ -75,6 +75,8 @@ function TerminalComponent({ sessionId }: TerminalComponentProps) {
     terminal.writeln('\x1b[1;32m🐑 Bug Shepherd Terminal\x1b[0m');
     terminal.writeln('\x1b[90mType "help" for available commands\x1b[0m');
     terminal.writeln('');
+    const writePrompt = () => terminal.write('\x1b[32m$\x1b[0m ');
+    writePrompt();
 
     // Handle input
     let currentLine = '';
@@ -145,8 +147,9 @@ function TerminalComponent({ sessionId }: TerminalComponentProps) {
       // Handle Enter
       if (code === 13) {
         terminal.writeln('');
-        executeCommand(currentLine);
+        const line = currentLine;
         currentLine = '';
+        void executeCommand(line).finally(writePrompt);
       }
       // Handle Backspace
       else if (code === 127) {
