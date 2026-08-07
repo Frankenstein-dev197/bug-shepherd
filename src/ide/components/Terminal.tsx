@@ -23,7 +23,7 @@ function TerminalComponent({ sessionId }: TerminalComponentProps) {
     state.terminalSessions.find((s) => s.id === sessionId)
   );
 
-  useEffectOnce(() => {
+  useEffect(() => {
     if (!containerRef.current) return;
 
     // Initialize terminal
