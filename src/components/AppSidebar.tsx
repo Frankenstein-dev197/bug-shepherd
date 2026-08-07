@@ -1,4 +1,4 @@
-import { LayoutDashboard, Plus, Bug, BarChart3, Code2, Settings, LogOut, Search } from "lucide-react";
+import { LayoutDashboard, Plus, Bug, BarChart3, Code2, FileCode2, Settings, LogOut, Search } from "lucide-react";
 import { StackedLogo } from "./StackedLogo";
 import { Link, useLocation } from "react-router-dom";
 import { useState } from "react";
@@ -14,6 +14,7 @@ export const navItems = [
   { icon: Bug, label: "All Bugs", path: "/bugs" },
   { icon: BarChart3, label: "Analytics", path: "/analytics" },
   { icon: Code2, label: "Developer", path: "/developer" },
+  { icon: FileCode2, label: "Code Editor", path: "/ide" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
