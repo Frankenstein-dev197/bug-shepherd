@@ -1,0 +1,10 @@
+export { IDE } from './components/IDE';
+export { CodeEditor } from './components/CodeEditor';
+export { FileExplorer } from './components/FileExplorer';
+export { Terminal } from './components/Terminal';
+export { AIAssistant } from './components/AIAssistant';
+export { DebugPanel } from './components/DebugPanel';
+export { CommandPalette } from './components/CommandPalette';
+export { GitPanel } from './components/GitPanel';
+export { useIDEStore } from './stores/ideStore';
+export * from './types';
