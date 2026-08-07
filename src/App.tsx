@@ -14,6 +14,7 @@ import BugDetail from "./pages/BugDetail";
 import BugList from "./pages/BugList";
 import Analytics from "./pages/Analytics";
 import Developer from "./pages/Developer";
+import IDEPage from "./pages/IDE";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -36,6 +37,7 @@ const App = () => (
               <Route path="/bugs/:id" element={<ProtectedRoute><BugDetail /></ProtectedRoute>} />
               <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
               <Route path="/developer" element={<ProtectedRoute><Developer /></ProtectedRoute>} />
+              <Route path="/ide" element={<ProtectedRoute><IDEPage /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
