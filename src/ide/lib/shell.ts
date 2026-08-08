@@ -414,7 +414,7 @@ export class Shell {
         const dir = await this.repo();
         onProgress?.('Pushing...');
         const result = await G.push(dir, { remote: args[1], ref: args[2] });
-        const err = result.errors?.join(', ');
+        const err = result.error ?? result.ok?.length === 0 ? result.error : undefined;
         if (err) return { output: `push rejected: ${err}`, error: true };
         return { output: `pushed to ${args[1] ?? 'origin'}` };
       }
