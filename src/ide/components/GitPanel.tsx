@@ -1,457 +1,433 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  GitBranch,
-  GitCommit,
-  GitPullRequest,
-  GitMerge,
-  Plus,
+  GitBranch as BranchIcon,
+  GitCommit as CommitIcon,
   RefreshCw,
   Upload,
   Download,
-  Trash2,
   Check,
-  AlertCircle,
-  ChevronDown,
-  ChevronRight,
-  MoreHorizontal,
-  Clock,
-  User,
-  FileText,
-  GitFork,
-  Star,
-  Eye,
-  Link2,
-  ExternalLink,
-  ArrowRight,
-  Diff,
+  Plus,
+  KeyRound,
+  Loader2,
+  FolderGit2,
+  Trash2,
 } from 'lucide-react';
-import { useIDEStore } from '../stores/ideStore';
+import * as G from '../lib/gitEngine';
 
-interface GitStatus {
-  branch: string;
-  ahead: number;
-  behind: number;
-  staged: GitFile[];
-  modified: GitFile[];
-  untracked: GitFile[];
-  conflicts: GitFile[];
-}
-
-interface GitFile {
-  path: string;
-  status: 'added' | 'modified' | 'deleted' | 'renamed' | 'untracked' | 'conflicting';
-  oldPath?: string;
-}
-
-interface GitCommitInfo {
-  hash: string;
-  shortHash: string;
-  message: string;
-  author: string;
-  authorEmail: string;
-  date: Date;
-  branches?: string[];
-  tags?: string[];
-}
-
-interface GitBranchInfo {
-  name: string;
-  isRemote: boolean;
-  isCurrent: boolean;
-  upstream?: string;
-  ahead?: number;
-  behind?: number;
-}
-
-// Sample data
-const sampleStatus: GitStatus = {
-  branch: 'feature/modern-ide-platform',
-  ahead: 1,
-  behind: 0,
-  staged: [
-    { path: 'src/ide/components/CommandPalette.tsx', status: 'added' },
-    { path: 'src/ide/components/GitPanel.tsx', status: 'modified' },
-  ],
-  modified: [
-    { path: 'src/App.tsx', status: 'modified' },
-    { path: 'README.md', status: 'modified' },
-  ],
-  untracked: [
-    { path: 'src/new-feature.ts', status: 'untracked' },
-  ],
-  conflicts: [],
-};
-
-const sampleCommits: GitCommitInfo[] = [
-  {
-    hash: 'abc1234567890abcdef',
-    shortHash: 'abc1234',
-    message: 'feat: add modern IDE platform with Monaco Editor, AI Assistant, and Git integration',
-    author: 'Developer',
-    authorEmail: 'dev@example.com',
-    date: new Date(Date.now() - 3600000),
-    branches: ['feature/modern-ide-platform'],
-  },
-  {
-    hash: 'def4567890abcdef1234',
-    shortHash: 'def4567',
-    message: 'fix: resolve migration syntax errors',
-    author: 'Developer',
-    authorEmail: 'dev@example.com',
-    date: new Date(Date.now() - 7200000),
-    branches: [],
-    tags: ['v1.0.0'],
-  },
-  {
-    hash: 'ghi7890abcdef123456',
-    shortHash: 'ghi7890',
-    message: 'docs: update README with new features',
-    author: 'Developer',
-    authorEmail: 'dev@example.com',
-    date: new Date(Date.now() - 86400000),
-  },
-];
-
-const sampleBranches: GitBranchInfo[] = [
-  { name: 'feature/modern-ide-platform', isRemote: false, isCurrent: true },
-  { name: 'feature/ai-integration', isRemote: false, isCurrent: false },
-  { name: 'main', isRemote: true, isCurrent: false, upstream: 'origin/main' },
-  { name: 'develop', isRemote: true, isCurrent: false, upstream: 'origin/develop' },
-];
+type Tab = 'changes' | 'branches' | 'history' | 'auth';
 
 export function GitPanel() {
-  const { setCurrentBranch, currentBranch } = useIDEStore();
-  const [activeTab, setActiveTab] = useState<'changes' | 'commits' | 'branches' | 'remote'>('changes');
-  const [status] = useState<GitStatus>(sampleStatus);
-  const [commits] = useState<GitCommitInfo[]>(sampleCommits);
-  const [branches] = useState<GitBranchInfo[]>(sampleBranches);
-  const [commitMessage, setCommitMessage] = useState('');
-  const [isCommitting, setIsCommitting] = useState(false);
+  const [tab, setTab] = useState<Tab>('changes');
+  const [repos, setRepos] = useState<string[]>([]);
+  const [repo, setRepo] = useState<string | null>(null);
+  const [branch, setBranch] = useState('');
+  const [changes, setChanges] = useState<G.StatusEntry[]>([]);
+  const [commits, setCommits] = useState<G.LogEntry[]>([]);
+  const [branches, setBranches] = useState<{ local: string[]; remote: string[] }>({ local: [], remote: [] });
+  const [remotes, setRemotes] = useState<{ remote: string; url: string }[]>([]);
+  const [message, setMessage] = useState('');
+  const [cloneUrl, setCloneUrl] = useState('');
+  const [newBranch, setNewBranch] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [status, setStatus] = useState<{ text: string; error?: boolean } | null>(null);
 
-  const handleCommit = useCallback(async () => {
-    if (!commitMessage.trim()) return;
-    setIsCommitting(true);
-    // Simulate commit
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setCommitMessage('');
-    setIsCommitting(false);
-  }, [commitMessage]);
+  // credentials form
+  const [creds, setCreds] = useState(G.listCredentials());
+  const [credHost, setCredHost] = useState('github.com');
+  const [credUser, setCredUser] = useState('');
+  const [credToken, setCredToken] = useState('');
+  const [author, setAuthorState] = useState(G.getAuthor());
 
-  const getStatusIcon = (status: GitFile['status']) => {
-    switch (status) {
-      case 'added':
-        return <Plus className="w-3 h-3 text-[#4ec9b0]" />;
-      case 'modified':
-        return <FileText className="w-3 h-3 text-[#dcdcaa]" />;
-      case 'deleted':
-        return <Trash2 className="w-3 h-3 text-[#f14c4c]" />;
-      case 'renamed':
-        return <Diff className="w-3 h-3 text-[#9cdcfe]" />;
-      case 'untracked':
-        return <GitFork className="w-3 h-3 text-[#6e6e6e]" />;
-      case 'conflicting':
-        return <AlertCircle className="w-3 h-3 text-[#f14c4c]" />;
-      default:
-        return <FileText className="w-3 h-3" />;
+  const refreshRepos = useCallback(async () => {
+    const list = await G.listRepos();
+    setRepos(list);
+    setRepo((current) => current ?? list[0] ?? null);
+  }, []);
+
+  const refreshRepo = useCallback(async (dir: string) => {
+    setBranch(await G.currentBranch(dir));
+    setChanges(await G.statusMatrix(dir));
+    setBranches(await G.listBranches(dir));
+    setRemotes(await G.listRemotes(dir));
+    try {
+      setCommits(await G.log(dir, 30));
+    } catch {
+      setCommits([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshRepos();
+  }, [refreshRepos]);
+
+  useEffect(() => {
+    if (repo) void refreshRepo(repo);
+  }, [repo, refreshRepo]);
+
+  const act = async (label: string, fn: () => Promise<string | void>) => {
+    setBusy(label);
+    setStatus(null);
+    try {
+      const result = await fn();
+      if (result) setStatus({ text: result });
+      if (repo) await refreshRepo(repo);
+    } catch (err) {
+      setStatus({ text: err instanceof Error ? err.message : String(err), error: true });
+    } finally {
+      setBusy(null);
     }
   };
 
-  const formatDate = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
+  const handleClone = () =>
+    act('clone', async () => {
+      if (!cloneUrl.trim()) throw new Error('Enter a repository URL');
+      const name = cloneUrl.replace(/\.git$/, '').split('/').pop() || 'repo';
+      const dir = `${G.WORKSPACE}/${name}`;
+      await G.cloneRepo({ url: cloneUrl.trim(), dir, onProgress: (m) => setStatus({ text: m }) });
+      setCloneUrl('');
+      await refreshRepos();
+      setRepo(dir);
+      return `Cloned into ${dir}`;
+    });
 
-    if (minutes < 60) return `${minutes} minutes ago`;
-    if (hours < 24) return `${hours} hours ago`;
-    if (days < 7) return `${days} days ago`;
-    return date.toLocaleDateString();
-  };
+  const tabButton = (id: Tab, label: string) => (
+    <button
+      key={id}
+      onClick={() => setTab(id)}
+      className={`px-2.5 py-1.5 text-[11px] uppercase tracking-wide ${
+        tab === id ? 'text-[#cccccc] border-b-2 border-[#007acc]' : 'text-[#969696] hover:text-[#cccccc]'
+      }`}
+    >
+      {label}
+    </button>
+  );
 
   return (
-    <div className="flex flex-col h-full bg-[#252526]">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#3c3c3c]">
+    <div className="h-full flex flex-col bg-[#252526] text-[#cccccc] text-[12px]">
+      {/* header */}
+      <div className="px-3 py-2 border-b border-[#3c3c3c] space-y-2">
         <div className="flex items-center gap-2">
-          <GitBranch className="w-4 h-4 text-[#f1502f]" />
-          <span className="text-[13px] font-medium text-[#cccccc]">Source Control</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            className="p-1.5 hover:bg-[#3c3c3c] rounded text-[#858585] hover:text-[#cccccc]"
-            title="Refresh"
+          <FolderGit2 className="w-4 h-4 text-[#007acc]" />
+          <select
+            value={repo ?? ''}
+            onChange={(e) => setRepo(e.target.value || null)}
+            className="flex-1 bg-[#3c3c3c] px-2 py-1 rounded text-[11px] outline-none"
           >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-          <button
-            className="p-1.5 hover:bg-[#3c3c3c] rounded text-[#858585] hover:text-[#cccccc]"
-            title="More Actions"
-          >
-            <MoreHorizontal className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Branch Info */}
-      <div className="flex items-center gap-2 px-4 py-2 bg-[#1e1e1e] border-b border-[#3c3c3c]">
-        <GitBranch className="w-3 h-3 text-[#858585]" />
-        <span className="text-[12px] text-[#cccccc]">{status.branch}</span>
-        {status.ahead > 0 && (
-          <span className="text-[10px] text-[#4ec9b0]">
-            ↑{status.ahead}
-          </span>
-        )}
-        {status.behind > 0 && (
-          <span className="text-[10px] text-[#f14c4c]">
-            ↓{status.behind}
-          </span>
-        )}
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center border-b border-[#3c3c3c]">
-        {[
-          { id: 'changes', label: 'Changes' },
-          { id: 'commits', label: 'Commit History' },
-          { id: 'branches', label: 'Branches' },
-          { id: 'remote', label: 'Remote' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`px-3 py-2 text-[12px] ${
-              activeTab === tab.id
-                ? 'text-[#cccccc] border-b-2 border-[#007acc]'
-                : 'text-[#858585] hover:text-[#cccccc]'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-auto">
-        {activeTab === 'changes' && (
-          <div>
-            {/* Commit Message */}
-            <div className="p-3 border-b border-[#3c3c3c]">
-              <textarea
-                value={commitMessage}
-                onChange={(e) => setCommitMessage(e.target.value)}
-                placeholder="Commit message..."
-                className="w-full h-20 px-3 py-2 bg-[#3c3c3c] text-[#cccccc] text-[12px] rounded border border-[#4c4c4c] outline-none focus:border-[#007acc] resize-none"
-              />
-              <div className="flex items-center justify-between mt-2">
-                <span className="text-[10px] text-[#6e6e6e]">
-                  {status.staged.length + status.modified.length + status.untracked.length} files changed
-                </span>
-                <button
-                  onClick={handleCommit}
-                  disabled={!commitMessage.trim() || isCommitting}
-                  className="px-3 py-1.5 text-[12px] bg-[#0e639c] text-white rounded hover:bg-[#1177bb] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                >
-                  {isCommitting ? (
-                    <RefreshCw className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <Check className="w-3 h-3" />
-                  )}
-                  Commit
-                </button>
-              </div>
-            </div>
-
-            {/* Staged Changes */}
-            {status.staged.length > 0 && (
-              <div className="border-b border-[#3c3c3c]">
-                <div className="px-3 py-1.5 text-[10px] font-semibold text-[#858585] uppercase bg-[#1e1e1e]">
-                  Staged Changes ({status.staged.length})
-                </div>
-                {status.staged.map((file) => (
-                  <div
-                    key={file.path}
-                    className="flex items-center gap-2 px-3 py-1.5 hover:bg-[#2a2d2e] cursor-pointer"
-                  >
-                    {getStatusIcon(file.status)}
-                    <span className="flex-1 text-[12px] text-[#cccccc] truncate">{file.path}</span>
-                    <button
-                      className="p-1 hover:bg-[#3c3c3c] rounded text-[#6e6e6e] hover:text-[#cccccc]"
-                      title="Unstage"
-                    >
-                      <ChevronDown className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Modified Changes */}
-            {status.modified.length > 0 && (
-              <div className="border-b border-[#3c3c3c]">
-                <div className="px-3 py-1.5 text-[10px] font-semibold text-[#858585] uppercase bg-[#1e1e1e]">
-                  Changes ({status.modified.length})
-                </div>
-                {status.modified.map((file) => (
-                  <div
-                    key={file.path}
-                    className="flex items-center gap-2 px-3 py-1.5 hover:bg-[#2a2d2e] cursor-pointer"
-                  >
-                    {getStatusIcon(file.status)}
-                    <span className="flex-1 text-[12px] text-[#cccccc] truncate">{file.path}</span>
-                    <button
-                      className="p-1 hover:bg-[#3c3c3c] rounded text-[#6e6e6e] hover:text-[#cccccc]"
-                      title="Stage"
-                    >
-                      <Plus className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Untracked Files */}
-            {status.untracked.length > 0 && (
-              <div className="border-b border-[#3c3c3c]">
-                <div className="px-3 py-1.5 text-[10px] font-semibold text-[#858585] uppercase bg-[#1e1e1e]">
-                  Untracked ({status.untracked.length})
-                </div>
-                {status.untracked.map((file) => (
-                  <div
-                    key={file.path}
-                    className="flex items-center gap-2 px-3 py-1.5 hover:bg-[#2a2d2e] cursor-pointer"
-                  >
-                    {getStatusIcon(file.status)}
-                    <span className="flex-1 text-[12px] text-[#cccccc] truncate">{file.path}</span>
-                    <button
-                      className="p-1 hover:bg-[#3c3c3c] rounded text-[#6e6e6e] hover:text-[#cccccc]"
-                      title="Stage"
-                    >
-                      <Plus className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'commits' && (
-          <div>
-            {commits.map((commit) => (
-              <div
-                key={commit.hash}
-                className="p-3 border-b border-[#3c3c3c] hover:bg-[#2a2d2e] cursor-pointer"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <GitCommit className="w-3 h-3 text-[#858585]" />
-                  <code className="text-[11px] text-[#4ec9b0]">{commit.shortHash}</code>
-                  {commit.branches?.map((branch) => (
-                    <span
-                      key={branch}
-                      className="px-1.5 py-0.5 text-[10px] bg-[#0e639c] text-white rounded"
-                    >
-                      {branch}
-                    </span>
-                  ))}
-                  {commit.tags?.map((tag) => (
-                    <span
-                      key={tag}
-                      className="px-1.5 py-0.5 text-[10px] bg-[#4ec9b0] text-[#1e1e1e] rounded"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-                <p className="text-[12px] text-[#cccccc] mb-1 line-clamp-2">{commit.message}</p>
-                <div className="flex items-center gap-3 text-[10px] text-[#6e6e6e]">
-                  <span className="flex items-center gap-1">
-                    <User className="w-3 h-3" />
-                    {commit.author}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {formatDate(commit.date)}
-                  </span>
-                </div>
-              </div>
+            {repos.length === 0 && <option value="">no repository</option>}
+            {repos.map((r) => (
+              <option key={r} value={r}>
+                {r.replace(`${G.WORKSPACE}/`, '')}
+              </option>
             ))}
+          </select>
+          <button
+            title="Refresh"
+            onClick={() => repo && void refreshRepo(repo)}
+            className="p-1 hover:bg-[#3c3c3c] rounded"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="flex gap-1">
+          <input
+            value={cloneUrl}
+            onChange={(e) => setCloneUrl(e.target.value)}
+            placeholder="https://github.com/owner/repo.git"
+            className="flex-1 bg-[#3c3c3c] px-2 py-1 rounded text-[11px] outline-none placeholder:text-[#7a7a7a]"
+          />
+          <button
+            onClick={handleClone}
+            disabled={busy === 'clone'}
+            className="px-2 py-1 bg-[#0e639c] hover:bg-[#1177bb] rounded text-[11px] flex items-center gap-1 disabled:opacity-60"
+          >
+            {busy === 'clone' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+            Clone
+          </button>
+        </div>
+
+        {repo && (
+          <div className="flex items-center justify-between text-[11px] text-[#969696]">
+            <span className="flex items-center gap-1">
+              <BranchIcon className="w-3 h-3" /> {branch}
+            </span>
+            <span className="flex gap-1">
+              <button
+                onClick={() => act('pull', async () => (await G.pull(repo), 'Pull complete'))}
+                disabled={!!busy}
+                className="px-2 py-0.5 hover:bg-[#3c3c3c] rounded flex items-center gap-1"
+              >
+                <Download className="w-3 h-3" /> Pull
+              </button>
+              <button
+                onClick={() =>
+                  act('push', async () => {
+                    const res = await G.push(repo);
+                    if (res.error) throw new Error(res.error);
+                    return 'Pushed to origin';
+                  })
+                }
+                disabled={!!busy}
+                className="px-2 py-0.5 hover:bg-[#3c3c3c] rounded flex items-center gap-1"
+              >
+                <Upload className="w-3 h-3" /> Push
+              </button>
+            </span>
           </div>
         )}
+      </div>
 
-        {activeTab === 'branches' && (
-          <div>
-            <div className="p-3 border-b border-[#3c3c3c]">
-              <button className="w-full px-3 py-2 text-[12px] bg-[#0e639c] text-white rounded hover:bg-[#1177bb] flex items-center justify-center gap-2">
-                <Plus className="w-4 h-4" />
-                New Branch
+      <div className="flex border-b border-[#3c3c3c]">
+        {tabButton('changes', 'Changes')}
+        {tabButton('branches', 'Branches')}
+        {tabButton('history', 'History')}
+        {tabButton('auth', 'Auth')}
+      </div>
+
+      {status && (
+        <div className={`px-3 py-1.5 text-[11px] ${status.error ? 'text-[#f14c4c]' : 'text-[#3b8eea]'}`}>
+          {status.text}
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto">
+        {!repo && tab !== 'auth' && (
+          <p className="p-3 text-[11px] text-[#969696]">
+            Clone a repository above to start. Everything runs with a real Git engine in your browser.
+          </p>
+        )}
+
+        {repo && tab === 'changes' && (
+          <div className="p-2 space-y-2">
+            <div className="flex gap-1">
+              <input
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Commit message"
+                className="flex-1 bg-[#3c3c3c] px-2 py-1 rounded text-[11px] outline-none placeholder:text-[#7a7a7a]"
+              />
+              <button
+                onClick={() =>
+                  act('commit', async () => {
+                    if (!message.trim()) throw new Error('Commit message required');
+                    const oid = await G.commit(repo, message.trim());
+                    setMessage('');
+                    return `Committed ${oid.slice(0, 7)}`;
+                  })
+                }
+                disabled={!!busy}
+                className="px-2 py-1 bg-[#0e639c] hover:bg-[#1177bb] rounded text-[11px] flex items-center gap-1"
+              >
+                <Check className="w-3 h-3" /> Commit
               </button>
             </div>
-            {branches.map((branch) => (
-              <div
-                key={branch.name}
-                className={`flex items-center gap-2 px-3 py-2 hover:bg-[#2a2d2e] cursor-pointer ${
-                  branch.isCurrent ? 'bg-[#094771]' : ''
-                }`}
-                onClick={() => setCurrentBranch(branch.name)}
-              >
-                {branch.isRemote ? (
-                  <GitFork className="w-3 h-3 text-[#6e6e6e]" />
-                ) : (
-                  <GitBranch className="w-3 h-3 text-[#f1502f]" />
-                )}
-                <span className={`flex-1 text-[12px] ${branch.isCurrent ? 'text-white' : 'text-[#cccccc]'}`}>
-                  {branch.name}
-                </span>
-                {branch.upstream && (
-                  <span className="text-[10px] text-[#6e6e6e]">
-                    {branch.upstream}
-                  </span>
-                )}
-                {branch.isCurrent && (
-                  <Check className="w-4 h-4 text-[#4ec9b0]" />
-                )}
-              </div>
-            ))}
+            <button
+              onClick={() => act('stageAll', async () => `Staged ${await G.stageAll(repo)} file(s)`)}
+              disabled={!!busy}
+              className="w-full px-2 py-1 bg-[#3c3c3c] hover:bg-[#4c4c4c] rounded text-[11px] flex items-center justify-center gap-1"
+            >
+              <Plus className="w-3 h-3" /> Stage all changes
+            </button>
+
+            {changes.length === 0 ? (
+              <p className="text-[11px] text-[#969696] px-1 py-2">Working tree clean</p>
+            ) : (
+              <ul className="space-y-0.5">
+                {changes.map((c) => (
+                  <li key={c.path} className="flex items-center gap-2 px-1 py-1 hover:bg-[#2a2d2e] rounded">
+                    <span
+                      className={`w-4 text-center text-[10px] font-bold ${
+                        c.status === 'untracked'
+                          ? 'text-[#73c991]'
+                          : c.status === 'deleted'
+                            ? 'text-[#f14c4c]'
+                            : 'text-[#e2c08d]'
+                      }`}
+                    >
+                      {c.status === 'untracked' ? 'U' : c.status === 'deleted' ? 'D' : c.status === 'added' ? 'A' : 'M'}
+                    </span>
+                    <span className="flex-1 truncate text-[11px]" title={c.path}>
+                      {c.path}
+                    </span>
+                    <button
+                      title="Stage"
+                      onClick={() => act('stage', () => G.stage(repo, c.path))}
+                      className="p-0.5 hover:bg-[#3c3c3c] rounded"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                    <button
+                      title="Unstage"
+                      onClick={() => act('unstage', () => G.unstage(repo, c.path))}
+                      className="p-0.5 hover:bg-[#3c3c3c] rounded"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 
-        {activeTab === 'remote' && (
-          <div className="p-4">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <GitBranch className="w-4 h-4 text-[#858585]" />
-                <span className="text-[13px] text-[#cccccc]">origin</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  className="p-1.5 hover:bg-[#3c3c3c] rounded text-[#858585] hover:text-[#cccccc]"
-                  title="Fetch"
-                >
-                  <Download className="w-4 h-4" />
-                </button>
-                <button
-                  className="p-1.5 hover:bg-[#3c3c3c] rounded text-[#858585] hover:text-[#cccccc]"
-                  title="Push"
-                >
-                  <Upload className="w-4 h-4" />
-                </button>
-              </div>
+        {repo && tab === 'branches' && (
+          <div className="p-2 space-y-2">
+            <div className="flex gap-1">
+              <input
+                value={newBranch}
+                onChange={(e) => setNewBranch(e.target.value)}
+                placeholder="new-branch"
+                className="flex-1 bg-[#3c3c3c] px-2 py-1 rounded text-[11px] outline-none placeholder:text-[#7a7a7a]"
+              />
+              <button
+                onClick={() =>
+                  act('branch', async () => {
+                    if (!newBranch.trim()) throw new Error('Branch name required');
+                    await G.createBranch(repo, newBranch.trim(), true);
+                    setNewBranch('');
+                    return 'Branch created and checked out';
+                  })
+                }
+                className="px-2 py-1 bg-[#0e639c] hover:bg-[#1177bb] rounded text-[11px]"
+              >
+                Create
+              </button>
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 p-2 bg-[#1e1e1e] rounded">
-                <GitBranch className="w-3 h-3 text-[#6e6e6e]" />
-                <span className="text-[12px] text-[#cccccc]">main</span>
-                <ArrowRight className="w-3 h-3 text-[#6e6e6e]" />
-                <span className="text-[12px] text-[#cccccc]">origin/main</span>
-                <span className="text-[10px] text-[#4ec9b0]">↑1</span>
-              </div>
-              <div className="flex items-center gap-2 p-2 bg-[#1e1e1e] rounded">
-                <GitBranch className="w-3 h-3 text-[#6e6e6e]" />
-                <span className="text-[12px] text-[#cccccc]">develop</span>
-                <ArrowRight className="w-3 h-3 text-[#6e6e6e]" />
-                <span className="text-[12px] text-[#cccccc]">origin/develop</span>
-              </div>
+            <ul>
+              {branches.local.map((b) => (
+                <li key={b} className="flex items-center gap-2 px-1 py-1 hover:bg-[#2a2d2e] rounded">
+                  <BranchIcon className="w-3 h-3 text-[#969696]" />
+                  <button
+                    onClick={() => act('checkout', async () => (await G.checkout(repo, b), `Switched to ${b}`))}
+                    className={`flex-1 text-left text-[11px] ${b === branch ? 'text-[#3b8eea]' : ''}`}
+                  >
+                    {b}
+                    {b === branch && ' (current)'}
+                  </button>
+                </li>
+              ))}
+              {branches.remote.map((b) => (
+                <li key={b} className="flex items-center gap-2 px-1 py-1 text-[#969696]">
+                  <BranchIcon className="w-3 h-3" />
+                  <span className="text-[11px]">{b}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="pt-2 border-t border-[#3c3c3c] text-[11px] text-[#969696]">
+              {remotes.length ? (
+                remotes.map((r) => (
+                  <div key={r.remote} className="truncate">
+                    {r.remote} → {r.url}
+                  </div>
+                ))
+              ) : (
+                <span>no remotes</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {repo && tab === 'history' && (
+          <ul className="p-2 space-y-1">
+            {commits.length === 0 && <p className="text-[11px] text-[#969696]">No commits yet</p>}
+            {commits.map((c) => (
+              <li key={c.oid} className="px-1 py-1.5 hover:bg-[#2a2d2e] rounded">
+                <div className="flex items-center gap-2">
+                  <CommitIcon className="w-3 h-3 text-[#969696]" />
+                  <span className="font-mono text-[10px] text-[#e2c08d]">{c.oid.slice(0, 7)}</span>
+                  <span className="text-[11px] truncate">{c.message.split('\n')[0]}</span>
+                </div>
+                <div className="pl-5 text-[10px] text-[#969696]">
+                  {c.author} · {new Date(c.timestamp).toLocaleString()}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {tab === 'auth' && (
+          <div className="p-2 space-y-3">
+            <div className="space-y-1">
+              <p className="text-[11px] text-[#969696] flex items-center gap-1">
+                <KeyRound className="w-3 h-3" /> Host credentials (personal access token)
+              </p>
+              <input
+                value={credHost}
+                onChange={(e) => setCredHost(e.target.value)}
+                placeholder="github.com / gitlab.com / bitbucket.org"
+                className="w-full bg-[#3c3c3c] px-2 py-1 rounded text-[11px] outline-none"
+              />
+              <input
+                value={credUser}
+                onChange={(e) => setCredUser(e.target.value)}
+                placeholder="username (oauth2 for GitLab)"
+                className="w-full bg-[#3c3c3c] px-2 py-1 rounded text-[11px] outline-none"
+              />
+              <input
+                type="password"
+                value={credToken}
+                onChange={(e) => setCredToken(e.target.value)}
+                placeholder="token"
+                className="w-full bg-[#3c3c3c] px-2 py-1 rounded text-[11px] outline-none"
+              />
+              <button
+                onClick={() => {
+                  if (!credHost || !credToken) {
+                    setStatus({ text: 'Host and token are required', error: true });
+                    return;
+                  }
+                  G.setCredential(credHost, { username: credUser || 'oauth2', token: credToken });
+                  setCreds(G.listCredentials());
+                  setCredToken('');
+                  setStatus({ text: `Saved credentials for ${credHost}` });
+                }}
+                className="w-full px-2 py-1 bg-[#0e639c] hover:bg-[#1177bb] rounded text-[11px]"
+              >
+                Save credentials
+              </button>
+              <ul className="text-[11px] text-[#969696]">
+                {Object.entries(creds).map(([host, cred]) => (
+                  <li key={host} className="flex items-center justify-between py-0.5">
+                    <span>
+                      {host} · {cred.username}
+                    </span>
+                    <button
+                      onClick={() => {
+                        G.removeCredential(host);
+                        setCreds(G.listCredentials());
+                      }}
+                      className="hover:text-[#f14c4c]"
+                    >
+                      remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="space-y-1 pt-2 border-t border-[#3c3c3c]">
+              <p className="text-[11px] text-[#969696]">Commit identity</p>
+              <input
+                value={author.name}
+                onChange={(e) => setAuthorState({ ...author, name: e.target.value })}
+                placeholder="Your name"
+                className="w-full bg-[#3c3c3c] px-2 py-1 rounded text-[11px] outline-none"
+              />
+              <input
+                value={author.email}
+                onChange={(e) => setAuthorState({ ...author, email: e.target.value })}
+                placeholder="you@example.com"
+                className="w-full bg-[#3c3c3c] px-2 py-1 rounded text-[11px] outline-none"
+              />
+              <button
+                onClick={() => {
+                  G.setAuthor(author);
+                  setStatus({ text: 'Commit identity saved' });
+                }}
+                className="w-full px-2 py-1 bg-[#3c3c3c] hover:bg-[#4c4c4c] rounded text-[11px]"
+              >
+                Save identity
+              </button>
             </div>
           </div>
         )}
