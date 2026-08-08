@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight, Moon, Sun } from "lucide-react";
 import { Logo3D } from "@/components/Logo3D";
 import testimonialAvatarAsset from "@/assets/testimonial-avatar.jpg.asset.json";
+import founderAsset from "@/assets/founder.jpg.asset.json";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 
@@ -348,6 +349,40 @@ const Landing = () => {
       <div className="relative z-10 w-full border-t border-border" />
 
       {/* CTA */}
+      {/* Founder */}
+      <section className="relative z-10 py-24 px-6">
+        <div className="mx-auto max-w-[1200px]">
+          <div className="border border-border">
+            <div className="grid grid-cols-1 md:grid-cols-[280px_1fr]">
+              <div className="border-b md:border-b-0 md:border-r border-border p-8 flex items-center justify-center">
+                <img
+                  src={founderAsset.url}
+                  alt="Portrait du créateur de Triage"
+                  loading="lazy"
+                  className="h-[200px] w-[200px] object-cover grayscale-0 border border-border"
+                />
+              </div>
+              <div className="p-8 flex flex-col justify-center">
+                <p className="text-[13px] uppercase tracking-[0.15em] text-muted-foreground mb-4">
+                  Créateur
+                </p>
+                <h2 className="text-[clamp(1.6rem,2.6vw,2.2rem)] font-[500] tracking-[-0.03em] text-foreground leading-[1.15]">
+                  Une plateforme construite par un développeur, pour les développeurs.
+                </h2>
+                <p className="mt-5 text-[14px] leading-[1.7] text-muted-foreground max-w-[560px]">
+                  J'ai créé Triage de zéro : suivi de bugs, API publique, console serveur,
+                  intégrations GitHub / GitLab et éditeur de code intégré. Chaque détail est
+                  pensé pour les équipes qui livrent vite, sans process inutile.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Full-width divider */}
+      <div className="relative z-10 w-full border-t border-border" />
+
       <section className="relative z-10 pt-32 pb-40 px-6 overflow-hidden">
         <div className="mx-auto max-w-[1200px] text-center relative">
           <h2 className="text-[clamp(2rem,4vw,3.2rem)] font-[500] tracking-[-0.035em] text-foreground leading-[1.1] mx-auto max-w-[560px]">
