@@ -133,7 +133,7 @@ export async function readFile(path: string): Promise<string> {
 export async function writeFile(path: string, content: string) {
   const dir = path.split('/').slice(0, -1).join('/');
   if (dir) await ensureDir(dir);
-  await pfs.writeFile(path, content, { encoding: 'utf8' });
+  await pfs.writeFile(path, content, 'utf8');
 }
 
 export async function rmrf(path: string) {
