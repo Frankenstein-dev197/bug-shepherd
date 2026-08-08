@@ -6,8 +6,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Plus, Trash2, Search, Copy, ChevronUp, ChevronDown } from 'lucide-react';
 import { useIDEStore } from '../stores/ideStore';
 import { useEffectOnce } from '../hooks/useEffectOnce';
-import { supabase } from '@/integrations/supabase/client';
-import { FunctionsHttpError } from '@supabase/supabase-js';
+import { Shell } from '../lib/shell';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalComponentProps {
@@ -72,10 +71,14 @@ function TerminalComponent({ sessionId }: TerminalComponentProps) {
     terminal.open(containerRef.current);
     fitAddon.fit();
 
-    terminal.writeln('\x1b[1;32m🐑 Bug Shepherd Terminal\x1b[0m');
-    terminal.writeln('\x1b[90mType "help" for available commands\x1b[0m');
+    const shell = new Shell();
+    void shell.init();
+
+    terminal.writeln('\x1b[1;32mTriage Shell\x1b[0m \x1b[90m— real filesystem + real git engine (isomorphic-git)\x1b[0m');
+    terminal.writeln('\x1b[90mType "help" for available commands. Repositories live in /workspace.\x1b[0m');
     terminal.writeln('');
-    const writePrompt = () => terminal.write('\x1b[32m$\x1b[0m ');
+    const writePrompt = () =>
+      terminal.write(`\x1b[36m${shell.prompt}\x1b[0m \x1b[32m$\x1b[0m `);
     writePrompt();
 
     // Handle input
@@ -94,51 +97,25 @@ function TerminalComponent({ sessionId }: TerminalComponentProps) {
       // Log command
       addTerminalLine(sessionId, { type: 'input', content: `$ ${trimmedCmd}` });
 
-      // Simulate command execution
-      const [command, ...args] = trimmedCmd.split(' ');
+      const result = await shell.run(trimmedCmd, (progress) =>
+        terminal.writeln(`\x1b[90m${progress}\x1b[0m`),
+      );
 
-      switch (command.toLowerCase()) {
-        case 'clear':
-          terminal.clear();
-          break;
-
-        case 'date':
-          terminal.writeln(new Date().toString());
-          break;
-
-        case 'echo':
-          terminal.writeln(args.join(' '));
-          addTerminalLine(sessionId, { type: 'output', content: args.join(' ') });
-          break;
-
-        default: {
-          // Real server-side execution (dev-console edge function)
-          const { data, error } = await supabase.functions.invoke('dev-console', {
-            body: { command: trimmedCmd },
-          });
-
-          if (error) {
-            const detail =
-              error instanceof FunctionsHttpError
-                ? await error.context.text()
-                : error.message;
-            terminal.writeln(`\x1b[31m${detail}\x1b[0m`);
-            addTerminalLine(sessionId, { type: 'error', content: detail });
-            break;
-          }
-
-          const output = String(data?.output ?? '');
-          const success = data?.success !== false;
-          output.split('\n').forEach((line: string) => {
-            terminal.writeln(success ? line : `\x1b[31m${line}\x1b[0m`);
-          });
-          addTerminalLine(sessionId, {
-            type: success ? 'output' : 'error',
-            content: output,
-          });
-        }
+      if (result.cleared) {
+        terminal.clear();
+        clearTerminal(sessionId);
+        return;
       }
-      addTerminalLine(sessionId, { type: 'output', content: '' });
+
+      if (result.output) {
+        result.output.split('\n').forEach((line: string) => {
+          terminal.writeln(result.error ? `\x1b[31m${line}\x1b[0m` : line);
+        });
+        addTerminalLine(sessionId, {
+          type: result.error ? 'error' : 'output',
+          content: result.output,
+        });
+      }
     };
 
     terminal.onData((data) => {
