@@ -1,11 +1,16 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Moon, Sun } from "lucide-react";
+import { ArrowRight, Moon, Sun, Layers } from "lucide-react";
 import { Logo3D } from "@/components/Logo3D";
 import testimonialAvatarAsset from "@/assets/testimonial-avatar.jpg.asset.json";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 
 import { StackedLogo } from "@/components/StackedLogo";
+
+// Importations depuis les packages internes de notre espace de travail (pnpm workspace)
+import { Button as OptimusButton } from "@optimus/ui";
+import { formatDate, capitalize } from "@optimus/utils";
+import type { User } from "@optimus/types";
 
 /** Apply slate accent on mount */
 const SLATE_HSL = "215 16% 47%";
@@ -227,6 +232,64 @@ const Landing = () => {
 
       {/* Full-width divider */}
       <div className="relative z-10 w-full border-t border-border" />
+
+      {/* Optimus Workspace Live Integration Showcase Section */}
+      <section className="relative z-10 pt-16 pb-16 px-6 overflow-hidden border-t border-b border-border bg-card/10">
+        <div className="mx-auto max-w-[1200px]">
+          <div className="flex flex-col lg:flex-row items-center gap-12">
+            <div className="flex-1 space-y-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 text-xs font-semibold">
+                <Layers className="h-3.5 w-3.5" />
+                Optimus Monorepo Integration
+              </div>
+              <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+                {capitalize("fully integrated architecture")}
+              </h2>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                This area showcases a live React component imported directly from <strong>@optimus/ui</strong>, utilizing types from <strong>@optimus/types</strong> and format utilities from <strong>@optimus/utils</strong> inside our custom pnpm workspace. Everything compiles smoothly under Turborepo.
+              </p>
+
+              <div className="p-4 rounded-lg border border-border bg-background space-y-4">
+                <h3 className="text-sm font-semibold text-foreground">Type Verification from @optimus/types:</h3>
+                <div className="text-xs font-mono bg-card/60 p-3 rounded border border-border text-muted-foreground space-y-1">
+                  <div><span className="text-indigo-400">const</span> demoUser: <span className="text-yellow-400">User</span> = &#123;</div>
+                  <div className="pl-4">id: <span className="text-green-400">"usr_web_opt"</span>,</div>
+                  <div className="pl-4">name: <span className="text-green-400">"devops expert"</span>,</div>
+                  <div className="pl-4">role: <span className="text-green-400">"admin"</span>,</div>
+                  <div className="pl-4">createdAt: <span className="text-green-400">"{new Date().toISOString()}"</span></div>
+                  <div>&#125;;</div>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Formatted creation date: <span className="font-semibold text-foreground">{formatDate(new Date().toISOString())}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 w-full max-w-md p-8 rounded-xl border border-border bg-card/30 flex flex-col items-center text-center space-y-6">
+              <div className="h-12 w-12 rounded-full bg-indigo-500/10 flex items-center justify-center">
+                <Layers className="h-6 w-6 text-indigo-400" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold text-foreground">@optimus/ui Live Button Component</h3>
+                <p className="text-xs text-muted-foreground max-w-xs">
+                  This elegant button below is imported directly from our shared component library. Try clicking it!
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3 justify-center">
+                <OptimusButton variant="primary" size="md" onClick={() => alert("Bonjour! Clicking this button validates @optimus/ui package import.")}>
+                  Primary UI Button
+                </OptimusButton>
+                <OptimusButton variant="outline" size="md" onClick={() => alert("Outline variant from @optimus/ui clicked!")}>
+                  Outline UI Button
+                </OptimusButton>
+              </div>
+              <div className="text-[11px] text-muted-foreground font-mono">
+                Source: packages/ui/src/index.ts
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Features */}
       <section className="relative z-10 pt-24 pb-24 px-6 overflow-hidden">
