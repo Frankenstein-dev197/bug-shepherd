@@ -13,6 +13,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import * as G from '../lib/gitEngine';
+import { getGitHubOAuthUrl, getGitLabOAuthUrl } from '@/integrations/git';
 
 type Tab = 'changes' | 'branches' | 'history' | 'auth';
 
@@ -32,11 +33,41 @@ export function GitPanel() {
   const [status, setStatus] = useState<{ text: string; error?: boolean } | null>(null);
 
   // credentials form
-  const [creds, setCreds] = useState(G.listCredentials());
+  const [creds, setCreds] = useState<G.GitCredentialInfo[]>(G.cachedCredentials());
   const [credHost, setCredHost] = useState('github.com');
   const [credUser, setCredUser] = useState('');
   const [credToken, setCredToken] = useState('');
   const [author, setAuthorState] = useState(G.getAuthor());
+
+  const refreshCreds = useCallback(async () => {
+    try {
+      setCreds(await G.listCredentials());
+    } catch (e) {
+      setStatus({ text: e instanceof Error ? e.message : 'Failed to load credentials', error: true });
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshCreds();
+  }, [refreshCreds]);
+
+  const startOAuth = (provider: 'github' | 'gitlab') => {
+    try {
+      const state = crypto.randomUUID();
+      sessionStorage.setItem('oauth_state', state);
+      const redirectUri = `${window.location.origin}/git/callback`;
+      const url =
+        provider === 'github'
+          ? getGitHubOAuthUrl(redirectUri, state)
+          : getGitLabOAuthUrl(redirectUri, state);
+      window.location.href = url;
+    } catch (e) {
+      setStatus({
+        text: e instanceof Error ? e.message : 'OAuth is not configured — use a personal access token',
+        error: true,
+      });
+    }
+  };
 
   const refreshRepos = useCallback(async () => {
     const list = await G.listRepos();
@@ -348,8 +379,30 @@ export function GitPanel() {
         {tab === 'auth' && (
           <div className="p-2 space-y-3">
             <div className="space-y-1">
+              <p className="text-[11px] text-[#969696]">Connect with OAuth (recommended)</p>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => startOAuth('github')}
+                  className="flex-1 px-2 py-1 bg-[#3c3c3c] hover:bg-[#4c4c4c] rounded text-[11px]"
+                >
+                  Connect GitHub
+                </button>
+                <button
+                  onClick={() => startOAuth('gitlab')}
+                  className="flex-1 px-2 py-1 bg-[#3c3c3c] hover:bg-[#4c4c4c] rounded text-[11px]"
+                >
+                  Connect GitLab
+                </button>
+              </div>
+              <p className="text-[10px] text-[#6a6a6a]">
+                Tokens are stored in the encrypted server vault and injected by the Git relay — they never
+                touch this browser.
+              </p>
+            </div>
+
+            <div className="space-y-1">
               <p className="text-[11px] text-[#969696] flex items-center gap-1">
-                <KeyRound className="w-3 h-3" /> Host credentials (personal access token)
+                <KeyRound className="w-3 h-3" /> Or use a personal access token
               </p>
               <input
                 value={credHost}
@@ -371,30 +424,39 @@ export function GitPanel() {
                 className="w-full bg-[#3c3c3c] px-2 py-1 rounded text-[11px] outline-none"
               />
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (!credHost || !credToken) {
                     setStatus({ text: 'Host and token are required', error: true });
                     return;
                   }
-                  G.setCredential(credHost, { username: credUser || 'oauth2', token: credToken });
-                  setCreds(G.listCredentials());
-                  setCredToken('');
-                  setStatus({ text: `Saved credentials for ${credHost}` });
+                  try {
+                    await G.setCredential(credHost, { username: credUser || 'oauth2', token: credToken });
+                    setCreds(G.cachedCredentials());
+                    setCredToken('');
+                    setStatus({ text: `Saved credentials for ${credHost}` });
+                  } catch (e) {
+                    setStatus({ text: e instanceof Error ? e.message : 'Failed to save', error: true });
+                  }
                 }}
                 className="w-full px-2 py-1 bg-[#0e639c] hover:bg-[#1177bb] rounded text-[11px]"
               >
-                Save credentials
+                Save token securely
               </button>
               <ul className="text-[11px] text-[#969696]">
-                {Object.entries(creds).map(([host, cred]) => (
-                  <li key={host} className="flex items-center justify-between py-0.5">
+                {creds.map((cred) => (
+                  <li key={cred.host} className="flex items-center justify-between py-0.5">
                     <span>
-                      {host} · {cred.username}
+                      {cred.host} · {cred.provider_username || cred.username} ·{' '}
+                      {cred.source === 'oauth' ? 'OAuth' : 'token'}
                     </span>
                     <button
-                      onClick={() => {
-                        G.removeCredential(host);
-                        setCreds(G.listCredentials());
+                      onClick={async () => {
+                        try {
+                          await G.removeCredential(cred.host);
+                          setCreds(G.cachedCredentials());
+                        } catch (e) {
+                          setStatus({ text: e instanceof Error ? e.message : 'Failed', error: true });
+                        }
                       }}
                       className="hover:text-[#f14c4c]"
                     >
