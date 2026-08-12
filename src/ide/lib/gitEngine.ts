@@ -242,10 +242,10 @@ export async function cloneRepo(opts: {
     dir: opts.dir,
     url: opts.url,
     corsProxy: getCorsProxy(),
+    headers: await proxyHeaders(),
     ref: opts.ref,
     singleBranch: !!opts.ref,
     depth: opts.depth ?? 25,
-    onAuth: () => onAuth(opts.url) ?? {},
     onMessage: (m) => opts.onProgress?.(m.trim()),
     onProgress: (p) =>
       opts.onProgress?.(
@@ -358,8 +358,9 @@ export async function push(dir: string, opts: { remote?: string; ref?: string; f
   const remote = opts.remote ?? 'origin';
   const url = await remoteUrl(dir, remote);
   if (!url) throw new Error(`No remote "${remote}" configured`);
-  if (!listCredentials()[hostOf(url)]) {
-    throw new Error(`No credentials for ${hostOf(url)} — add a token in the Git panel first`);
+  await listCredentials();
+  if (!hasCachedCredential(hostOf(url))) {
+    throw new Error(`No credentials for ${hostOf(url)} — connect the host in the Git panel first`);
   }
   return git.push({
     fs,
@@ -369,13 +370,12 @@ export async function push(dir: string, opts: { remote?: string; ref?: string; f
     ref: opts.ref,
     force: opts.force,
     corsProxy: getCorsProxy(),
-    onAuth: () => onAuth(url) ?? {},
+    headers: await proxyHeaders(),
   });
 }
 
 export async function pull(dir: string, opts: { remote?: string; ref?: string } = {}) {
   const remote = opts.remote ?? 'origin';
-  const url = await remoteUrl(dir, remote);
   const author = getAuthor();
   await git.pull({
     fs,
@@ -386,19 +386,18 @@ export async function pull(dir: string, opts: { remote?: string; ref?: string } 
     singleBranch: true,
     author,
     corsProxy: getCorsProxy(),
-    onAuth: () => (url ? onAuth(url) ?? {} : {}),
+    headers: await proxyHeaders(),
   });
 }
 
 export async function fetch(dir: string, remote = 'origin') {
-  const url = await remoteUrl(dir, remote);
   return git.fetch({
     fs,
     http,
     dir,
     remote,
     corsProxy: getCorsProxy(),
-    onAuth: () => (url ? onAuth(url) ?? {} : {}),
+    headers: await proxyHeaders(),
   });
 }
 
