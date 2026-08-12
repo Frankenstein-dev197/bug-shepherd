@@ -390,6 +390,57 @@ export type Database = {
         }
         Relationships: []
       }
+      git_credentials: {
+        Row: {
+          access_token: string
+          created_at: string
+          expires_at: string | null
+          host: string
+          id: string
+          provider: string
+          provider_user_id: string | null
+          provider_username: string | null
+          refresh_token: string | null
+          scope: string | null
+          source: string
+          updated_at: string
+          user_id: string
+          username: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          expires_at?: string | null
+          host: string
+          id?: string
+          provider?: string
+          provider_user_id?: string | null
+          provider_username?: string | null
+          refresh_token?: string | null
+          scope?: string | null
+          source?: string
+          updated_at?: string
+          user_id: string
+          username?: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          expires_at?: string | null
+          host?: string
+          id?: string
+          provider?: string
+          provider_user_id?: string | null
+          provider_username?: string | null
+          refresh_token?: string | null
+          scope?: string | null
+          source?: string
+          updated_at?: string
+          user_id?: string
+          username?: string
+        }
+        Relationships: []
+      }
       git_events: {
         Row: {
           actor: string

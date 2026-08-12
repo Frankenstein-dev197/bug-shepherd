@@ -9,6 +9,7 @@
 import LightningFS from '@isomorphic-git/lightning-fs';
 import git from 'isomorphic-git';
 import http from 'isomorphic-git/http/web';
+import { supabase } from '@/integrations/supabase/client';
 
 export const fsInstance = new LightningFS('triage-ide');
 export const fs = fsInstance as unknown as Parameters<typeof git.init>[0]['fs'];
@@ -16,19 +17,29 @@ export const pfs = fsInstance.promises;
 
 export const WORKSPACE = '/workspace';
 
-/** Browsers cannot talk to git hosts directly (no CORS headers), so we relay. */
-const DEFAULT_CORS_PROXY = 'https://cors.isomorphic-git.org';
+/**
+ * Browsers cannot talk to git hosts directly (no CORS headers), so we relay
+ * through our own authenticated edge function. The relay also injects the
+ * user's access token server-side, so tokens never live in the browser.
+ */
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+const DEFAULT_CORS_PROXY = `${SUPABASE_URL}/functions/v1/git-proxy`;
 
-const LS_TOKENS = 'triage.git.tokens';
 const LS_AUTHOR = 'triage.git.author';
 const LS_PROXY = 'triage.git.corsProxy';
 
-export interface GitCredential {
+/** Metadata only — the token itself stays on the server. */
+export interface GitCredentialInfo {
+  host: string;
+  provider: string;
+  source: string;
   username: string;
-  token: string;
+  provider_username: string | null;
+  scope: string | null;
+  expires_at: string | null;
+  updated_at: string | null;
 }
-
-type TokenMap = Record<string, GitCredential>;
 
 function readJSON<T>(key: string, fallback: T): T {
   try {
@@ -55,26 +66,68 @@ export function hostOf(url: string): string {
   }
 }
 
-export function listCredentials(): TokenMap {
-  return readJSON<TokenMap>(LS_TOKENS, {});
+/* ------------------------------------------------------------------ */
+/* credentials (server-side vault)                                     */
+/* ------------------------------------------------------------------ */
+
+let credentialCache: GitCredentialInfo[] = [];
+
+async function callCredentials<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke('git-credentials', { body });
+  if (error) {
+    const details = 'context' in error ? await (error as { context: Response }).context.text() : error.message;
+    throw new Error(details || 'Credential vault request failed');
+  }
+  if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+  return data as T;
 }
 
-export function setCredential(host: string, cred: GitCredential) {
-  const all = listCredentials();
-  all[host] = cred;
-  localStorage.setItem(LS_TOKENS, JSON.stringify(all));
+/** Masked list of stored credentials (never includes tokens). */
+export async function listCredentials(): Promise<GitCredentialInfo[]> {
+  const { credentials } = await callCredentials<{ credentials: GitCredentialInfo[] }>({ action: 'list' });
+  credentialCache = credentials ?? [];
+  return credentialCache;
 }
 
-export function removeCredential(host: string) {
-  const all = listCredentials();
-  delete all[host];
-  localStorage.setItem(LS_TOKENS, JSON.stringify(all));
+export function cachedCredentials(): GitCredentialInfo[] {
+  return credentialCache;
 }
 
-function onAuth(url: string) {
-  const cred = listCredentials()[hostOf(url)];
-  if (!cred) return undefined;
-  return { username: cred.username || 'oauth2', password: cred.token };
+export function hasCachedCredential(host: string): boolean {
+  return credentialCache.some((c) => c.host === host.toLowerCase());
+}
+
+export async function setCredential(
+  host: string,
+  cred: { username?: string; token: string; provider?: string },
+) {
+  await callCredentials({
+    action: 'save',
+    host,
+    username: cred.username,
+    token: cred.token,
+    provider: cred.provider,
+  });
+  await listCredentials();
+}
+
+export async function removeCredential(host: string) {
+  await callCredentials({ action: 'delete', host });
+  await listCredentials();
+}
+
+/**
+ * Headers sent to the relay: the app session, not the git token.
+ * The relay resolves the git token for the current user server-side.
+ */
+async function proxyHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error('Sign in to use Git — the secure relay requires a session');
+  return {
+    Authorization: `Bearer ${accessToken}`,
+    apikey: SUPABASE_KEY,
+  };
 }
 
 export interface GitAuthor {
@@ -189,10 +242,10 @@ export async function cloneRepo(opts: {
     dir: opts.dir,
     url: opts.url,
     corsProxy: getCorsProxy(),
+    headers: await proxyHeaders(),
     ref: opts.ref,
     singleBranch: !!opts.ref,
     depth: opts.depth ?? 25,
-    onAuth: () => onAuth(opts.url) ?? {},
     onMessage: (m) => opts.onProgress?.(m.trim()),
     onProgress: (p) =>
       opts.onProgress?.(
@@ -305,8 +358,9 @@ export async function push(dir: string, opts: { remote?: string; ref?: string; f
   const remote = opts.remote ?? 'origin';
   const url = await remoteUrl(dir, remote);
   if (!url) throw new Error(`No remote "${remote}" configured`);
-  if (!listCredentials()[hostOf(url)]) {
-    throw new Error(`No credentials for ${hostOf(url)} — add a token in the Git panel first`);
+  await listCredentials();
+  if (!hasCachedCredential(hostOf(url))) {
+    throw new Error(`No credentials for ${hostOf(url)} — connect the host in the Git panel first`);
   }
   return git.push({
     fs,
@@ -316,13 +370,12 @@ export async function push(dir: string, opts: { remote?: string; ref?: string; f
     ref: opts.ref,
     force: opts.force,
     corsProxy: getCorsProxy(),
-    onAuth: () => onAuth(url) ?? {},
+    headers: await proxyHeaders(),
   });
 }
 
 export async function pull(dir: string, opts: { remote?: string; ref?: string } = {}) {
   const remote = opts.remote ?? 'origin';
-  const url = await remoteUrl(dir, remote);
   const author = getAuthor();
   await git.pull({
     fs,
@@ -333,19 +386,18 @@ export async function pull(dir: string, opts: { remote?: string; ref?: string } 
     singleBranch: true,
     author,
     corsProxy: getCorsProxy(),
-    onAuth: () => (url ? onAuth(url) ?? {} : {}),
+    headers: await proxyHeaders(),
   });
 }
 
 export async function fetch(dir: string, remote = 'origin') {
-  const url = await remoteUrl(dir, remote);
   return git.fetch({
     fs,
     http,
     dir,
     remote,
     corsProxy: getCorsProxy(),
-    onAuth: () => (url ? onAuth(url) ?? {} : {}),
+    headers: await proxyHeaders(),
   });
 }
 

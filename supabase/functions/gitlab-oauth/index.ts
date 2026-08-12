@@ -76,10 +76,13 @@ Deno.serve(async (req) => {
     if (authError || !user) return json({ error: "Unauthorized" }, 401);
 
     // Store or update the GitLab token
-    const { error: upsertError } = await db.from("git_oauth_tokens").upsert(
+    const { error: upsertError } = await db.from("git_credentials").upsert(
       {
         user_id: user.id,
+        host: "gitlab.com",
         provider: "gitlab",
+        source: "oauth",
+        username: "oauth2",
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token || null,
         expires_at: tokenData.expires_in
@@ -89,7 +92,7 @@ Deno.serve(async (req) => {
         provider_user_id: String(gitlabUser.id),
         provider_username: gitlabUser.username,
       },
-      { onConflict: "user_id,provider" }
+      { onConflict: "user_id,host" }
     );
 
     if (upsertError) {

@@ -472,22 +472,23 @@ export class Shell {
 
       case 'auth': {
         if (!args[1] || args[1] === 'list') {
-          const creds = G.listCredentials();
-          const hosts = Object.keys(creds);
+          const creds = await G.listCredentials();
           return {
-            output: hosts.length
-              ? hosts.map((h) => `${h}\t${creds[h].username}\t${'•'.repeat(8)}`).join('\n')
+            output: creds.length
+              ? creds
+                  .map((c) => `${c.host}\t${c.username}\t${c.source}\t${'•'.repeat(8)} (stored server-side)`)
+                  .join('\n')
               : 'no credentials stored',
           };
         }
         if (args[1] === 'rm') {
-          G.removeCredential(args[2]);
+          await G.removeCredential(args[2]);
           return { output: `removed credentials for ${args[2]}` };
         }
         const [, host, username, token] = args;
         if (!host || !token) return { output: 'usage: git auth <host> <username> <token>', error: true };
-        G.setCredential(host, { username, token });
-        return { output: `stored credentials for ${host}` };
+        await G.setCredential(host, { username, token });
+        return { output: `stored credentials for ${host} (encrypted vault, never kept in the browser)` };
       }
 
       default:

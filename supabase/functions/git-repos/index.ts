@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
 
     // Get all OAuth tokens for the user
     const { data: tokens, error: tokensError } = await db
-      .from("git_oauth_tokens")
+      .from("git_credentials")
       .select("*")
       .eq("user_id", user.id);
 
@@ -60,14 +60,14 @@ Deno.serve(async (req) => {
     for (const token of tokens) {
       if (token.provider === "github") {
         try {
-          const ghRepos = await fetchGitHubRepos(token.access_token, token.provider_username);
+          const ghRepos = await fetchGitHubRepos(token.access_token, token.provider_username || token.username);
           repos.push(...ghRepos);
         } catch (e) {
           console.error("Failed to fetch GitHub repos:", e);
         }
       } else if (token.provider === "gitlab") {
         try {
-          const glRepos = await fetchGitLabRepos(token.access_token, token.provider_username);
+          const glRepos = await fetchGitLabRepos(token.access_token, token.provider_username || token.username);
           repos.push(...glRepos);
         } catch (e) {
           console.error("Failed to fetch GitLab repos:", e);
